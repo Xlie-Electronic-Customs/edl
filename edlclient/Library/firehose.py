@@ -491,7 +491,7 @@ class firehose(metaclass=LogBase):
             data = f"<?xml version=\"1.0\" ?><data>\n" + \
                    f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                    f" label=\"{partitionname}\"" + \
-                   f" filename=\"{filename}\"" + \
+                   f" filename=\"{filename.split('/')[-1]}\"" + \
                    f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                    f" physical_partition_number=\"{physical_partition_number}\"" + \
                    f" start_sector=\"{start_sector}\""
