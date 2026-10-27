@@ -70,6 +70,8 @@ class firehose_client(metaclass=LogBase):
             if arguments["--devicemodel"] is not None:
                 devicemodel = arguments["--devicemodel"]
         self.cfg.programmer = self.sahara.programmer
+        self.cfg.digest = self.sahara.digest
+        self.cfg.sign = self.sahara.sign
         self.firehose = firehose(cdc=cdc, xml=xmlparser(), cfg=self.cfg, loglevel=self.__logger.level,
                                  devicemodel=devicemodel, serial=sahara.serial, skipresponse=skipresponse,
                                  luns=self.getluns(arguments), args=arguments)
@@ -723,7 +725,7 @@ class firehose_client(metaclass=LogBase):
                         startsector = partition.sector
                     if self.firehose.modules is not None:
                         self.firehose.modules.writeprepare()
-                    if self.firehose.cmd_program(lun, startsector, filename):
+                    if self.firehose.cmd_program(lun, startsector, filename, partitionname):
                         self.printer(f"Wrote {filename} to sector {str(startsector)}.")
                     else:
                         self.printer(f"Error writing {filename} to sector {str(startsector)}.")
@@ -784,7 +786,7 @@ class firehose_client(metaclass=LogBase):
                                        f"only has {partition.sectors}.")
                             return False
                         self.printer(f"Writing {filename} to partition {str(partition.name)}.")
-                        self.firehose.cmd_program(lun, partition.sector, filename)
+                        self.firehose.cmd_program(lun, partition.sector, filename, partname)
                     else:
                         if partname[0:3] == "gpt" or partname[-3:] == "xml":
                             self.printer(f"Can't find a partition named {partname} in the gpt, but continuing anyway.")
@@ -849,7 +851,7 @@ class firehose_client(metaclass=LogBase):
                 for partitionname in partitions:
                     if partitionname in guid_gpt.partentries:
                         partition = guid_gpt.partentries[partitionname]
-                        self.firehose.cmd_erase(lun, partition.sector, partition.sectors)
+                        self.firehose.cmd_erase(lun, partition.sector, partition.sectors, partitionname)
                         self.printer(
                             f"Erased {partitionname} starting at sector {str(partition.sector)} " +
                             f"with sector count {str(partition.sectors)}.")
@@ -874,7 +876,7 @@ class firehose_client(metaclass=LogBase):
                     self.firehose.modules.writeprepare()
                 if partitionname in guid_gpt.partentries:
                     partition = guid_gpt.partentries[partitionname]
-                    self.firehose.cmd_erase(lun, partition.sector, sectors)
+                    self.firehose.cmd_erase(lun, partition.sector, sectors, partitionname)
                     self.printer(
                         f"Erased {partitionname} starting at sector {str(partition.sector)} " +
                         f"with sector count {str(sectors)}.")
@@ -943,6 +945,7 @@ class firehose_client(metaclass=LogBase):
                         if elem.tag == "program":
                             if elem.get("filename", ""):
                                 filename = os.path.join(imagedir, elem.get("filename"))
+                                label = elem.get("label")
                                 if not os.path.isfile(filename):
                                     self.error("%s doesn't exist!" % filename)
                                     success = False
@@ -959,7 +962,7 @@ class firehose_client(metaclass=LogBase):
                                 self.info(f"[qfil] programming {filename} to partition({partition_number})" +
                                           f"@sector({start_sector})...")
 
-                                self.firehose.cmd_program(int(partition_number), int(start_sector), filename)
+                                self.firehose.cmd_program(int(partition_number), int(start_sector), filename, label)
                 else:
                     self.warning(f"File : {filename} not found.")
                     success = False

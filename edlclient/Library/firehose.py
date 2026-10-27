@@ -470,7 +470,7 @@ class firehose(metaclass=LogBase):
             return f" PAGES_PER_BLOCK=\"{self.cfg.PAGES_PER_BLOCK}\""
         return ""
 
-    def cmd_program(self, physical_partition_number, start_sector, filename, display=True):
+    def cmd_program(self, physical_partition_number, start_sector, filename, partitionname="", display=True):
         total = os.stat(filename).st_size
         sparse = QCSparse(filename, self.loglevel)
         sparseformat = False
@@ -490,6 +490,8 @@ class firehose(metaclass=LogBase):
 
             data = f"<?xml version=\"1.0\" ?><data>\n" + \
                    f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+                   f" label=\"{partitionname}\"" + \
+                   f" filename=\"{filename}\"" + \
                    f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                    f" physical_partition_number=\"{physical_partition_number}\"" + \
                    f" start_sector=\"{start_sector}\""
@@ -533,7 +535,7 @@ class firehose(metaclass=LogBase):
                     return False
         return True
 
-    def cmd_program_buffer(self, physical_partition_number, start_sector, wfdata, display=True):
+    def cmd_program_buffer(self, physical_partition_number, start_sector, wfdata, partition="", display=True):
         bytestowrite = len(wfdata)
         total = bytestowrite
         # Make sure we fill data up to the sector size
@@ -546,6 +548,7 @@ class firehose(metaclass=LogBase):
 
         data = f"<?xml version=\"1.0\" ?><data>\n" + \
                f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+               f" label=\"{partition}\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
                f" start_sector=\"{start_sector}\""
@@ -592,7 +595,7 @@ class firehose(metaclass=LogBase):
             self.error(f"Error:{rsp.error}")
         return True
 
-    def cmd_erase(self, physical_partition_number, start_sector, num_partition_sectors, display=True):
+    def cmd_erase(self, physical_partition_number, start_sector, num_partition_sectors, partitionname="", display=True):
         if display:
             self.info(f"\nErasing from physical partition {str(physical_partition_number)}, " +
                       f"sector {str(start_sector)}, sectors {str(num_partition_sectors)}")
@@ -600,6 +603,7 @@ class firehose(metaclass=LogBase):
         if "erase" in self.supported_functions:
             data = f"<?xml version=\"1.0\" ?><data>\n" + \
                    f"<erase SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+                   f" label=\"{partitionname}\"" + \
                    f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                    f" physical_partition_number=\"{physical_partition_number}\"" + \
                    f" start_sector=\"{start_sector}\""
@@ -665,6 +669,7 @@ class firehose(metaclass=LogBase):
                 f"sector {str(start_sector)}, sectors {str(num_partition_sectors)}")
 
         data = f"<?xml version=\"1.0\" ?><data><read SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+               f" label=\"PrimaryGPT\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
                f" start_sector=\"{start_sector}\""
@@ -726,6 +731,7 @@ class firehose(metaclass=LogBase):
             print_progress(prog, 100, prefix='Progress:', suffix='Complete', bar_length=50)
 
         data = f"<?xml version=\"1.0\" ?><data><read SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
+               f" label=\"PrimaryGPT\"" + \
                f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                f" physical_partition_number=\"{physical_partition_number}\"" + \
                f" start_sector=\"{start_sector}\""
@@ -888,6 +894,13 @@ class firehose(metaclass=LogBase):
         return luns
 
     def configure(self, lvl):
+        if self.cfg.digest:
+                self.verify_digest()
+
+        if self.cfg.sign:
+                self.verify_vip()
+                self.sha256init()
+
         if self.cfg.SECTOR_SIZE_IN_BYTES == 0:
             if self.cfg.MemoryName.lower() == "emmc":
                 self.cfg.SECTOR_SIZE_IN_BYTES = 512
@@ -954,6 +967,8 @@ class firehose(metaclass=LogBase):
                     else:
                         self.error("Error on EDL Authentification")
                         return False
+                elif "VIP is enabled, receiving the partition info of size 36864":
+                    self.info("EDL VIP AUTH")
                 elif "MaxPayloadSizeToTargetInBytes" in rsp.data:
                     try:
                         self.cfg.MemoryName = rsp.data["MemoryName"]
@@ -1088,6 +1103,35 @@ class firehose(metaclass=LogBase):
                         self.nothing.ntprojectverify()
             self.luns = self.getluns(self.args)
             return True
+
+    def verify_digest(self):
+        digest_file = self.cfg.digest
+        try:
+            with open(digest_file, "rb") as f:
+                data = f.read()
+        except FileNotFoundError:
+                self.warning("Incorrect Digest file patch: " + digest_file)
+                return
+        self.cdc.write(data)
+        self.xmlsend("")
+
+    def verify_vip(self):
+        sigfile = self.cfg.sign
+        try:
+            with open(sigfile, "rb") as f:
+                data = f.read()
+        except FileNotFoundError:
+                self.warning("Incorrect Sign file patch:  " + sigfile)
+                return
+
+        cmd = "<?xml version=\"1.0\" ?><data><verify value=\"ping\" EnableVip=\"1\"/></data>"
+        self.xmlsend(cmd)
+        self.xmlsend(data, True)
+        self.xmlsend("")
+
+    def sha256init(self):
+        cmd = "<?xml version=\"1.0\" ?><data><sha256init Verbose=\"1\"/></data>"
+        self.xmlsend(cmd)
 
     def getlunsize(self, lun):
         if lun not in self.lunsizes:
