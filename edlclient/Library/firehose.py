@@ -470,7 +470,7 @@ class firehose(metaclass=LogBase):
             return f" PAGES_PER_BLOCK=\"{self.cfg.PAGES_PER_BLOCK}\""
         return ""
 
-    def cmd_program(self, physical_partition_number, start_sector, filename, partitionname="", display=True):
+    def cmd_program(self, physical_partition_number, start_sector, filename, partitionname="BackupGPT", display=True):
         total = os.stat(filename).st_size
         sparse = QCSparse(filename, self.loglevel)
         sparseformat = False
@@ -488,13 +488,24 @@ class firehose(metaclass=LogBase):
                 self.info(f"\nWriting to physical partition {str(physical_partition_number)}, " +
                           f"sector {str(start_sector)}, sectors {str(num_partition_sectors)}")
 
+            xml_filename = filename.split('/')[-1].split('.')[0]+".img"
+
+            if partitionname == "BackupGPT":
+                xml_filename = f"gpt_backup{physical_partition_number}.bin"
+
+            if sparseformat:
+                xml_sparse = "true"
+            else:
+                xml_sparse = "false"
+
             data = f"<?xml version=\"1.0\" ?><data>\n" + \
                    f"<program SECTOR_SIZE_IN_BYTES=\"{self.cfg.SECTOR_SIZE_IN_BYTES}\"" + \
                    f" label=\"{partitionname}\"" + \
-                   f" filename=\"{filename.split('/')[-1]}\"" + \
+                   f" filename=\"{xml_filename}\"" + \
                    f" num_partition_sectors=\"{num_partition_sectors}\"" + \
                    f" physical_partition_number=\"{physical_partition_number}\"" + \
-                   f" start_sector=\"{start_sector}\""
+                   f" start_sector=\"{start_sector}\"" + \
+                   f" sparse=\"{xml_sparse}\""
             data += self.nand_pages_attr() + " "
             if self.modules is not None:
                 data += self.modules.addprogram()

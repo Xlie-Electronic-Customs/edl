@@ -725,7 +725,7 @@ class firehose_client(metaclass=LogBase):
                         startsector = partition.sector
                     if self.firehose.modules is not None:
                         self.firehose.modules.writeprepare()
-                    if self.firehose.cmd_program(lun, startsector, filename, partitionname):
+                    if self.firehose.cmd_program(lun, startsector, filename):
                         self.printer(f"Wrote {filename} to sector {str(startsector)}.")
                     else:
                         self.printer(f"Error writing {filename} to sector {str(startsector)}.")
@@ -946,6 +946,8 @@ class firehose_client(metaclass=LogBase):
                             if elem.get("filename", ""):
                                 filename = os.path.join(imagedir, elem.get("filename"))
                                 label = elem.get("label")
+                                if label != "PrimaryGPT":
+                                    label = "BackupGPT"
                                 if not os.path.isfile(filename):
                                     self.error("%s doesn't exist!" % filename)
                                     success = False
